@@ -175,20 +175,15 @@ class Range {
       throw new TypeError('a Range is required')
     }
 
+    // the two ranges intersect iff some pair of simple ranges is
+    // jointly satisfiable; pairwise comparator endpoint comparisons are
+    // not enough, so that question is delegated to the single shared
+    // satisfiability decision.
     return this.set.some((thisComparators) => {
-      return (
-        isSatisfiable(thisComparators, options) &&
-        range.set.some((rangeComparators) => {
-          return (
-            isSatisfiable(rangeComparators, options) &&
-            thisComparators.every((thisComparator) => {
-              return rangeComparators.every((rangeComparator) => {
-                return thisComparator.intersects(rangeComparator, options)
-              })
-            })
-          )
-        })
-      )
+      return range.set.some((rangeComparators) => {
+        return satisfiable.isSatisfiable(
+          thisComparators.concat(rangeComparators), options)
+      })
     })
   }
 
@@ -233,30 +228,13 @@ const {
   caretTrimReplace,
 } = require('../internal/re')
 const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require('../internal/constants')
+const satisfiable = require('../internal/satisfiable')
 
 // unbounded global build-metadata stripper used by parseRange
 const BUILDSTRIPRE = new RegExp(src[t.BUILD], 'g')
 
 const isNullSet = c => c.value === '<0.0.0-0'
 const isAny = c => c.value === ''
-
-// take a set of comparators and determine whether there
-// exists a version which can satisfy it
-const isSatisfiable = (comparators, options) => {
-  let result = true
-  const remainingComparators = comparators.slice()
-  let testComparator = remainingComparators.pop()
-
-  while (result && remainingComparators.length) {
-    result = remainingComparators.every((otherComparator) => {
-      return testComparator.intersects(otherComparator, options)
-    })
-
-    testComparator = remainingComparators.pop()
-  }
-
-  return result
-}
 
 // comprised of xranges, tildes, stars, and gtlt's at this point.
 // already replaced the hyphen ranges

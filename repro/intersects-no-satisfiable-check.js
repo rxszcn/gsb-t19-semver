@@ -3,6 +3,7 @@
 const semver = require("../index.js")
 const { Range, Comparator, SemVer } = semver
 const P = (label, v) => console.log(label + " => " + JSON.stringify(v))
+semver.simplify = semver.simplifyRange
 
 // A. empty-range vs intersects vs test (tuple prerelease rule)
 P("A1 intersects('>1.2.3','<1.2.4-0')", semver.intersects(">1.2.3", "<1.2.4-0"))

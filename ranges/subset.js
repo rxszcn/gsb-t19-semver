@@ -5,6 +5,7 @@ const Comparator = require('../classes/comparator.js')
 const { ANY } = Comparator
 const satisfies = require('../functions/satisfies.js')
 const compare = require('../functions/compare.js')
+const { isSatisfiable } = require('../internal/satisfiable.js')
 
 // Complex range `r1 || r2 || ...` is a subset of `R1 || R2 || ...` iff:
 // - Every simple range `r1, r2, ...` is a null set, OR
@@ -12,6 +13,11 @@ const compare = require('../functions/compare.js')
 //   some `R1, R2, ...`
 //
 // Simple range `c1 c2 ...` is a subset of simple range `C1 C2 ...` iff:
+// - If the c set is a null set, report null (handled by the outer loop)
+// - If the C set is a null set, return false
+//   Both null-set decisions come from the shared isSatisfiable()
+//   decision in internal/satisfiable, the only place that may answer
+//   "does this conjunction admit any version?".
 // - If c is only the ANY comparator
 //   - If C is only the ANY comparator, return true
 //   - Else if in prerelease mode, return false
@@ -20,14 +26,10 @@ const compare = require('../functions/compare.js')
 //   - if in prerelease mode, return true
 //   - else replace C with `[>=0.0.0]`
 // - Let EQ be the set of = comparators in c
-// - If EQ is more than one, return true (null set)
 // - Let GT be the highest > or >= comparator in c
 // - Let LT be the lowest < or <= comparator in c
-// - If GT and LT, and GT.semver > LT.semver, return true (null set)
 // - If any C is a = range, and GT or LT are set, return false
 // - If EQ
-//   - If GT, and EQ does not satisfy GT, return true (null set)
-//   - If LT, and EQ does not satisfy LT, return true (null set)
 //   - If EQ satisfies every C, return true
 //   - Else return false
 // - If GT
@@ -78,6 +80,18 @@ const simpleSubset = (sub, dom, options) => {
     return true
   }
 
+  // The null set is a subset of everything (reported as null so the
+  // outer loop can ignore null simple ranges within a complex range),
+  // and nothing non-empty is a subset of the null set.  Both emptiness
+  // questions come from the single shared satisfiability decision, and
+  // this must run before ANY comparators are rewritten to bounds.
+  if (!isSatisfiable(sub, options)) {
+    return null
+  }
+  if (!isSatisfiable(dom, options)) {
+    return false
+  }
+
   if (sub.length === 1 && sub[0].semver === ANY) {
     if (dom.length === 1 && dom[0].semver === ANY) {
       return true
@@ -108,30 +122,13 @@ const simpleSubset = (sub, dom, options) => {
     }
   }
 
-  if (eqSet.size > 1) {
-    return null
-  }
-
   let gtltComp
   if (gt && lt) {
     gtltComp = compare(gt.semver, lt.semver, options)
-    if (gtltComp > 0) {
-      return null
-    } else if (gtltComp === 0 && (gt.operator !== '>=' || lt.operator !== '<=')) {
-      return null
-    }
   }
 
   // will iterate one or zero times
   for (const eq of eqSet) {
-    if (gt && !satisfies(eq, String(gt), options)) {
-      return null
-    }
-
-    if (lt && !satisfies(eq, String(lt), options)) {
-      return null
-    }
-
     for (const c of dom) {
       if (!satisfies(eq, String(c), options)) {
         return false

@@ -15,6 +15,10 @@ const cases = [
   ['^1.2.3-pre.0', '1.x', false],
   ['^1.2.3-pre.0', '1.x', true, { includePrerelease: true }],
   ['>2 <1', '3', true],
+  // a non-empty range is not a subset of the null set
+  ['1.2.3', '<0.0.0-0', false],
+  ['*', '<0.0.0-0', false],
+  ['1.2.3', '>x', false],
   ['1 || 2 || 3', '>=1.0.0', true],
 
   // everything is a subset of *
