@@ -5,6 +5,7 @@ const Comparator = require('../classes/comparator.js')
 const { ANY } = Comparator
 const satisfies = require('../functions/satisfies.js')
 const compare = require('../functions/compare.js')
+const { isSatisfiable, higherGT, lowerLT } = require('../classes/satisfiable.js')
 
 // Complex range `r1 || r2 || ...` is a subset of `R1 || R2 || ...` iff:
 // - Every simple range `r1, r2, ...` is a null set, OR
@@ -12,6 +13,9 @@ const compare = require('../functions/compare.js')
 //   some `R1, R2, ...`
 //
 // Simple range `c1 c2 ...` is a subset of simple range `C1 C2 ...` iff:
+// - If c cannot be satisfied by any version, return true (null set).
+//   This is determined by the shared isSatisfiable() check, the same
+//   one used by intersects and minVersion.
 // - If c is only the ANY comparator
 //   - If C is only the ANY comparator, return true
 //   - Else if in prerelease mode, return false
@@ -20,14 +24,10 @@ const compare = require('../functions/compare.js')
 //   - if in prerelease mode, return true
 //   - else replace C with `[>=0.0.0]`
 // - Let EQ be the set of = comparators in c
-// - If EQ is more than one, return true (null set)
 // - Let GT be the highest > or >= comparator in c
 // - Let LT be the lowest < or <= comparator in c
-// - If GT and LT, and GT.semver > LT.semver, return true (null set)
 // - If any C is a = range, and GT or LT are set, return false
 // - If EQ
-//   - If GT, and EQ does not satisfy GT, return true (null set)
-//   - If LT, and EQ does not satisfy LT, return true (null set)
 //   - If EQ satisfies every C, return true
 //   - Else return false
 // - If GT
@@ -96,6 +96,11 @@ const simpleSubset = (sub, dom, options) => {
     }
   }
 
+  // the null set is a subset of everything
+  if (!isSatisfiable(sub, options)) {
+    return null
+  }
+
   const eqSet = new Set()
   let gt, lt
   for (const c of sub) {
@@ -108,30 +113,13 @@ const simpleSubset = (sub, dom, options) => {
     }
   }
 
-  if (eqSet.size > 1) {
-    return null
-  }
-
   let gtltComp
   if (gt && lt) {
     gtltComp = compare(gt.semver, lt.semver, options)
-    if (gtltComp > 0) {
-      return null
-    } else if (gtltComp === 0 && (gt.operator !== '>=' || lt.operator !== '<=')) {
-      return null
-    }
   }
 
   // will iterate one or zero times
   for (const eq of eqSet) {
-    if (gt && !satisfies(eq, String(gt), options)) {
-      return null
-    }
-
-    if (lt && !satisfies(eq, String(lt), options)) {
-      return null
-    }
-
     for (const c of dom) {
       if (!satisfies(eq, String(c), options)) {
         return false
@@ -220,30 +208,6 @@ const simpleSubset = (sub, dom, options) => {
   }
 
   return true
-}
-
-// >=1.2.3 is lower than >1.2.3
-const higherGT = (a, b, options) => {
-  if (!a) {
-    return b
-  }
-  const comp = compare(a.semver, b.semver, options)
-  return comp > 0 ? a
-    : comp < 0 ? b
-    : b.operator === '>' && a.operator === '>=' ? b
-    : a
-}
-
-// <=1.2.3 is higher than <1.2.3
-const lowerLT = (a, b, options) => {
-  if (!a) {
-    return b
-  }
-  const comp = compare(a.semver, b.semver, options)
-  return comp < 0 ? a
-    : comp > 0 ? b
-    : b.operator === '<' && a.operator === '<=' ? b
-    : a
 }
 
 module.exports = subset
